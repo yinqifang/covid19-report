@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>魔幻</title>
+    <link href="https://cdn.bootcss.com/bootstrap/4.1.1/css/bootstrap.min.css" rel="stylesheet">
+    <link href="./css/main.css" rel="stylesheet">
+    <script src="./js/jquery.min.js"></script>
+    <script src="./js/echarts.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv=Content-Type content="text/html; charset=utf-8">
+</head>
+<body>
+
+<div id="main-content" class="container">
+    <div id="inner-content" class="row">
+        <!-- 每日新增 -->
+        <div id="divDailyIncrement" class="row"></div>
+
+        <!-- 原始数据 -->
+        <div id="divOrigData" class="row"></div>
+    </div>
+</div>
+
+
+</body>
+<script type="text/javascript">
+
+
+    // 加载原始数据
+    function loadOrigDataDiv() {
+        $.ajax({
+            url: 'http://' + window.location.host + '/covid19-report/daily/increment/area/name/list',
+            type: 'GET',
+            contentType: 'application/json; charset=utf-8',
+            success: function (data) {
+                var $div = $('#divOrigData');
+                for (var i = 0; i < data.length; i++) {
+                    // 添加页面元素
+                    var areaName = data[i];
+                    var tableId = "table_" + i;
+                    var $divTable = $('<div class="row">\n' +
+                        '                <label for="' + tableId + '">' + areaName + '数据: </label>\n' +
+                        '                <table id="' + tableId + '" class="table table-striped">\n' +
+                        '                    <tbody id="tableBody' + areaName + '"></tbody>\n' +
+                        '                </table>\n' +
+                        '            </div>');
+                    $div.append($divTable);
+                    // 加载数据
+                    var $table = $('#' + tableId);
+                    var url = 'http://' + window.location.host + '/covid19-report/daily/increment/original/data/' + areaName;
+                    loadTableData($table, url);
+                }
+            }
+        });
+    }
+
+    // 加载表格数据
+    function loadTableData($table, url) {
+        $.ajax({
+            url: url,
+            type: 'GET',
+            data: {},
+            contentType: 'application/json; charset=utf-8',
+            success: function (data) {
+                // 添加表头
+                var $head = $('<thead/>');
+                var header = data.header;
+                for (var i = 0; i < header.length; i++) {
+                    $head.append($('<th>' + header[i] + '</th>'));
+                }
+                $table.append($head);
+
+                // 添加数据
+                var rows = data.data
+                for (var i = 0; i < rows.length; i++) {
+                    row = rows[i];
+                    var $row = $('<tr/>');
+                    for (var j = 0; j < row.length; j++) {
+                        $row.append($('<td>' + emptyIfNull(row[j]) + '</td>'));
+                    }
+                    $table.append($row);
+                }
+            }
+        });
+    }
+
+
+    function emptyIfNull(val) {
+        if (val == null) {
+            return "";
+        } else {
+            return val;
+        }
+    }
+
+    // 加载每日新增图表
+    function loadDailyIncrementDiv() {
+        $.ajax({
+            url: 'http://' + window.location.host + '/covid19-report/daily/increment/area/name/list',
+            type: 'GET',
+            contentType: 'application/json; charset=utf-8',
+            success: function (data) {
+                var $div = $('#divDailyIncrement');
+                for (var i = 0; i < data.length; i++) {
+                    // 添加页面元素
+                    var areaName = data[i];
+                    // 每日新增的数据
+                    var divId1 = "chartsIncreaseCount_total_" + i;
+                    var $divChart1 = $('<div id="' + divId1 + '" class="charts"></div>');
+                    $div.append($divChart1);
+                    // 加载数据
+                    var strTitle1 = areaName + '新增';
+                    var url1 = 'http://' + window.location.host + '/covid19-report/daily/increment/report/total/' + areaName;
+                    loadCharts(divId1, strTitle1, url1, '日期', '人数');
+
+
+                    // 社会面每日新增的数据
+                    var divId2 = "chartsIncreaseCount_community_" + i;
+                    var $divChart2 = $('<div id="' + divId2 + '" class="charts"></div>');
+                    $div.append($divChart2);
+                    // 加载数据
+                    var strTitle1 = areaName + '社会面新增';
+                    var url1 = 'http://' + window.location.host + '/covid19-report/daily/increment/report/community/' + areaName;
+                    loadCharts(divId2, strTitle1, url1, '日期', '人数');
+                }
+            }
+        });
+    }
+
+
+    // 通用加载图表
+    function loadCharts(divId, strTitle, url, xName, yName) {
+        // 获取数据
+        $.ajax({
+            url: url,
+            type: 'GET',
+            data: {},
+            contentType: 'application/json; charset=utf-8',
+            success: function (rtnData) {
+                if (rtnData.data == null || rtnData.data.length === 0) {
+                    // 没有数据，删除图表占位
+                    $("#" + divId).remove();
+                    return;
+                }
+                // 设置图表组件尺寸
+                var innerContentWidth = $('#inner-content').width();
+                var screenHeight = $(window).height();
+                var chartsMinWidth = 300;
+                // var chartsWidth = innerContentWidth;
+                var chartsWidth = 450;
+                // var chartsHeight = screenHeight / 2;
+                var chartsHeight = 300;
+                var chartsMaxHeight = 400;
+                $('#' + divId).css({
+                    "min-width": chartsMinWidth + "px",
+                    "width": chartsWidth + "px",
+                    "max-height": chartsMaxHeight + "px",
+                    "height": chartsHeight + "px"
+                });
+
+                // 构建series数据
+                var seriesData = [];
+                for (var i = 0; i < rtnData.legend.length; i++) {
+                    var singleSeriesData = {
+                        name: rtnData.legend[i],
+                        data: rtnData.data[i],
+                        type: 'line',
+                        label: {
+                            normal: {
+                                show: false,    // 折线图上不显示数字
+                                position: 'top',
+                                fontSize: 10
+                            }
+                        }
+                    };
+                    if (rtnData.markLine != null && rtnData.markLine.length > 0) {
+                        singleSeriesData.markLine = {
+                            symbol: "none",       //去掉警戒线最后面的箭头
+                            silent: true,
+                            data: [{
+                                lineStyle: {               //警戒线的样式  ，虚实  颜色
+                                    type: "solid",
+                                    color: "red"
+                                },
+                                yAxis: rtnData.markLine[i]
+                            }]
+                        }
+                    }
+                    seriesData.push(singleSeriesData);
+                }
+
+                // 基于准备好的dom，初始化echarts实例
+                var chartsCountryCount = echarts.init(document.getElementById(divId));
+                // 指定图表的配置项和数据
+                var optCountryCount = {
+                    color: ['#c23531', '#61a0a8', '#91c7ae', '#2f4554', '#d48265', '#749f83', '#ca8622', '#bda29a', '#6e7074', '#546570', '#c4ccd3'],
+                    title: {
+                        text: strTitle
+                    },
+                    tooltip: {},
+                    legend: {
+                        orient: 'horizontal',
+                        data: rtnData.legend,
+                        itemHeight: 10, //改变圆圈大小
+                        textStyle: {
+                            fontSize: 10
+                        },
+                        top: 20,
+                        left: 55
+                    },
+                    xAxis: {
+                        name: xName,
+                        data: rtnData.axisX,
+                        axisLabel: {
+                            rotate: -60
+                        }
+                    },
+                    yAxis: {
+                        name: yName,
+                        nameTextStyle: {
+                            align: 'right',
+                            padding: [0, 10, 0, 0]
+                        }
+                    },
+                    grid: {
+                        left: 55
+                    },
+                    dataZoom: [{
+                        type: "inside"
+                    }],
+                    // dataZoom:[{
+                    //     type: 'slider',//图表下方的伸缩条
+                    //     show : true, //是否显示
+                    //     realtime : true, //拖动时，是否实时更新系列的视图
+                    //     start : 0, //伸缩条开始位置（1-100），可以随时更改
+                    //     end : 100, //伸缩条结束位置（1-100），可以随时更改
+                    // }],
+                    // toolbox: {
+                    //     show: true,
+                    //     feature: {
+                    //         dataZoom: {
+                    //             yAxisIndex: "none"
+                    //         }
+                    //     }
+                    // },
+                    series: seriesData
+                };
+                // 使用刚指定的配置项和数据显示图表。
+                chartsCountryCount.setOption(optCountryCount);
+            }
+        });
+    }
+
+
+    $(function () {
+
+        // 每日新增
+        loadDailyIncrementDiv();
+
+        // 加载表格数据
+        loadOrigDataDiv();
+
+    });
+
+
+</script>
+</html>

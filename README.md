@@ -1,2 +1,2 @@
 # covid19-report
-Covid-19 report
+新冠疫情报表
